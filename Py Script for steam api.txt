@@ -1,0 +1,183 @@
+import requests
+import json
+import csv
+import time
+from datetime import datetime
+
+print("=" * 70)
+print("STEAMSPY REAL DATA EXTRACTOR")
+print("=" * 70)
+print("\nThis will download REAL Steam game data from SteamSpy's public API")
+print("Estimated time: 10-30 minutes depending on number of games")
+print("\n" + "=" * 70)
+
+# SteamSpy API endpoints
+BASE_URL = "https://steamspy.com/api.php"
+
+def get_all_games():
+    """Get list of all games from SteamSpy"""
+    print("\n[1/3] Fetching list of all Steam games...")
+    
+    params = {
+        'request': 'all',
+        'page': 0  # Gets top games
+    }
+    
+    try:
+        response = requests.get(BASE_URL, params=params, timeout=30)
+        response.raise_for_status()
+        games = response.json()
+        print(f"✓ Found {len(games)} games")
+        return games
+    except Exception as e:
+        print(f"✗ Error fetching games: {e}")
+        return None
+
+def get_game_details(appid):
+    """Get detailed information for a specific game"""
+    params = {
+        'request': 'appdetails',
+        'appid': appid
+    }
+    
+    try:
+        response = requests.get(BASE_URL, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"  Error fetching AppID {appid}: {e}")
+        return None
+
+def extract_games_data(num_games=1000):
+    """
+    Extract data for specified number of games
+    
+    Args:
+        num_games: Number of games to extract (default 1000)
+                  Recommended: 500-2000 for good balance
+                  Max: 10000+ (but takes longer)
+    """
+    
+    # Get all games
+    all_games = get_all_games()
+    if not all_games:
+        print("Failed to fetch games list")
+        return
+    
+    # Sort by owners (most popular first) to get meaningful data
+    games_list = sorted(
+        all_games.items(), 
+        key=lambda x: x[1].get('owners', 0), 
+        reverse=True
+    )[:num_games]
+    
+    print(f"\n[2/3] Extracting detailed data for top {num_games} games...")
+    print("This will take a few minutes. Please wait...")
+    
+    extracted_data = []
+    errors = 0
+    
+    for idx, (appid, basic_info) in enumerate(games_list, 1):
+        if idx % 50 == 0:
+            print(f"  Progress: {idx}/{num_games} games processed...")
+        
+        # Get detailed info
+        details = get_game_details(appid)
+        
+        if details:
+            # Combine basic and detailed info
+            game_data = {
+                'AppID': appid,
+                'Name': details.get('name', 'Unknown'),
+                'Developer': details.get('developer', 'Unknown'),
+                'Publisher': details.get('publisher', 'Unknown'),
+                'Owners': details.get('owners', '0'),
+                'Price': details.get('price', 0),
+                'Positive_Reviews': details.get('positive', 0),
+                'Negative_Reviews': details.get('negative', 0),
+                'Average_Forever': details.get('average_forever', 0),
+                'Average_2Weeks': details.get('average_2weeks', 0),
+                'Median_Forever': details.get('median_forever', 0),
+                'Median_2Weeks': details.get('median_2weeks', 0),
+                'Peak_CCU': details.get('ccu', 0),
+                'Tags': ','.join(list(details.get('tags', {}).keys())[:5]),  # Top 5 tags
+                'Genre': details.get('genre', 'Unknown'),
+                'Languages': details.get('languages', 'Unknown')
+            }
+            extracted_data.append(game_data)
+        else:
+            errors += 1
+        
+        # Be nice to the API - don't hammer it
+        time.sleep(0.5)  # Wait 0.5 seconds between requests
+    
+    print(f"✓ Completed! Successfully extracted {len(extracted_data)} games")
+    if errors > 0:
+        print(f"  ({errors} games had errors and were skipped)")
+    
+    return extracted_data
+
+def save_to_csv(data, filename='steam_real_data.csv'):
+    """Save extracted data to CSV file"""
+    print(f"\n[3/3] Saving data to {filename}...")
+    
+    if not data:
+        print("✗ No data to save")
+        return
+    
+    try:
+        with open(filename, 'w', newline='', encoding='utf-8') as f:
+            if data:
+                writer = csv.DictWriter(f, fieldnames=data[0].keys())
+                writer.writeheader()
+                writer.writerows(data)
+        
+        print(f"✓ Successfully saved {len(data)} games to {filename}")
+        print("\n" + "=" * 70)
+        print("SUCCESS! Your REAL Steam data is ready!")
+        print("=" * 70)
+        print(f"\nFile location: {filename}")
+        print("File size: ~" + str(len(data)) + " rows")
+        print("\nYou can now:")
+        print("  1. Open this CSV in Excel to verify it looks good")
+        print("  2. Import it into PowerBI")
+        print("  3. Submit it for your assignment")
+        print("\nThis is REAL data from SteamSpy's public API - 100% legitimate!")
+        
+    except Exception as e:
+        print(f"✗ Error saving file: {e}")
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+if __name__ == "__main__":
+    print("\nHow many games do you want to extract?")
+    print("  - 500 games  = ~5 minutes  (good for testing)")
+    print("  - 1000 games = ~10 minutes (recommended)")
+    print("  - 2000 games = ~20 minutes (more data)")
+    print("  - 5000 games = ~45 minutes (comprehensive)")
+    
+    try:
+        num_games = int(input("\nEnter number (default 1000): ") or "1000")
+    except ValueError:
+        num_games = 1000
+        print(f"Invalid input. Using default: {num_games}")
+    
+    print(f"\nStarting extraction of {num_games} games...")
+    print("=" * 70)
+    
+    # Extract the data
+    data = extract_games_data(num_games)
+    
+    # Save to CSV
+    if data:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"steam_real_data_{timestamp}.csv"
+        save_to_csv(data, filename)
+        
+        print("\n✅ ALL DONE!")
+        print(f"\nYour file: {filename}")
+        print("This is REAL data - safe to submit for your assignment!")
+    else:
+        print("\n✗ Failed to extract data. Please check your internet connection.")
